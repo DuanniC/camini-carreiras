@@ -1683,11 +1683,16 @@ async function loadAdminBriefings() {
             ${escapeHtml(b.objetivo || 'Não informado.')}
           </div>
           <div class="briefing-admin-actions">
-            ${curriculo ? `<a href="${escapeHtml(curriculo)}" target="_blank" rel="noopener">Abrir currículo</a>` : ''}
-            ${carta ? `<a href="${escapeHtml(carta)}" target="_blank" rel="noopener">Abrir carta</a>` : ''}
-            ${pdf ? `<a href="${escapeHtml(pdf)}" target="_blank" rel="noopener">Abrir PDF</a>` : ''}
-            <button type="button" onclick='copyBriefingToClipboard(${JSON.stringify("${b.id || ''}").replace(/</g, '\\u003c')})'>Copiar resumo</button>
-          </div>
+  ${curriculo ? `<a href="/api/arquivo?path=${encodeURIComponent(curriculo)}" target="_blank" rel="noopener">Abrir currículo</a>` : ''}
+
+  ${carta ? `<a href="/api/arquivo?path=${encodeURIComponent(carta)}" target="_blank" rel="noopener">Abrir carta</a>` : ''}
+
+  ${pdf ? `<a href="/api/arquivo?path=${encodeURIComponent(pdf)}" target="_blank" rel="noopener">Abrir PDF</a>` : ''}
+
+  <button type="button" onclick='copyBriefingToClipboard(${JSON.stringify("${b.id || ''}").replace(/</g, '\\u003c')})'>
+    Copiar resumo
+  </button>
+</div>
         </div>
       `;
     }).join('');
