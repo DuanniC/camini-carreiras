@@ -842,6 +842,16 @@ input[type="file"] {
   background: var(--c-wine);
   color: var(--c-bg);
 }
+.briefing-admin-actions .btn-briefing-delete {
+  background: var(--c-wine);
+  color: var(--c-bg);
+  border-color: var(--c-wine);
+}
+.briefing-admin-actions .btn-briefing-delete:hover {
+  background: var(--c-ink);
+  border-color: var(--c-ink);
+  color: var(--c-bg);
+}
 
 /* alerts */
 .alert {
@@ -1638,6 +1648,18 @@ document.querySelectorAll('.admin-tab').forEach(t => {
 
 
 // ---------- BRIEFINGS ADMIN ----------
+function getAdminToken() {
+  // Use a mesma senha do acesso restrito como ADMIN_TOKEN na Vercel.
+  return adminPass || '';
+}
+
+function getBriefingHeaders() {
+  return {
+    'Accept': 'application/json',
+    'Authorization': `Bearer ${getAdminToken()}`
+  };
+}
+
 async function loadAdminBriefings() {
   const list = document.getElementById('adminBriefingsList');
   const errorBox = document.getElementById('briefingsError');
@@ -1647,7 +1669,7 @@ async function loadAdminBriefings() {
   list.innerHTML = '<div class="admin-empty">Carregando briefings...</div>';
 
   try {
-    const response = await fetch('/api/briefings', { headers: { 'Accept': 'application/json' } });
+    const response = await fetch('/api/briefings', { headers: getBriefingHeaders() });
     const result = await response.json();
 
     if (!response.ok || !result.ok) {
@@ -1683,17 +1705,12 @@ async function loadAdminBriefings() {
             ${escapeHtml(b.objetivo || 'Não informado.')}
           </div>
           <div class="briefing-admin-actions">
-  ${curriculo ? `<a href="/api/arquivo?path=${encodeURIComponent(curriculo)}" target="_blank" rel="noopener">Abrir currículo</a>` : ''}
-
-  ${carta ? `<a href="/api/arquivo?path=${encodeURIComponent(carta)}" target="_blank" rel="noopener">Abrir carta</a>` : ''}
-
-  ${pdf ? `<a href="/api/arquivo?path=${encodeURIComponent(pdf)}" target="_blank" rel="noopener">Abrir PDF</a>` : ''}
-
-  <button type="button" onclick='copyBriefingToClipboard(${JSON.stringify("${b.id || ''}").replace(/</g, '\\u003c')})'>
-    Copiar resumo
-  </button>
-</div>
-        </div>
+            ${curriculo ? `<a href="/api/arquivo?path=${encodeURIComponent(curriculo)}" target="_blank" rel="noopener">Abrir currículo</a>` : ''}
+            ${carta ? `<a href="/api/arquivo?path=${encodeURIComponent(carta)}" target="_blank" rel="noopener">Abrir carta</a>` : ''}
+            ${pdf ? `<a href="/api/arquivo?path=${encodeURIComponent(pdf)}" target="_blank" rel="noopener">Abrir PDF</a>` : ''}
+            <button type="button" onclick="copyBriefingToClipboard('${escapeHtml(b.id || '')}')">Copiar resumo</button>
+            <button type="button" class="btn-briefing-delete" onclick="deleteBriefing('${escapeHtml(b.id || '')}')">Deletar</button>
+          </div>        </div>
       `;
     }).join('');
   } catch (error) {
@@ -1707,7 +1724,7 @@ async function loadAdminBriefings() {
 
 async function copyBriefingToClipboard(id) {
   try {
-    const response = await fetch('/api/briefings', { headers: { 'Accept': 'application/json' } });
+    const response = await fetch('/api/briefings', { headers: getBriefingHeaders() });
     const result = await response.json();
     const briefings = Array.isArray(result.briefings) ? result.briefings : [];
     const b = briefings.find(item => String(item.id) === String(id));
@@ -1729,6 +1746,34 @@ async function copyBriefingToClipboard(id) {
   }
 }
 
+
+async function deleteBriefing(id) {
+  if (!id) return alert('Briefing não encontrado.');
+
+  const ok = confirm('Tem certeza que deseja deletar este briefing? Esta ação apaga também currículo, carta e PDF salvos.');
+  if (!ok) return;
+
+  try {
+    const response = await fetch(`/api/briefings?id=${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: getBriefingHeaders()
+    });
+
+    const result = await response.json();
+
+    if (!response.ok || !result.ok) {
+      throw new Error(result?.error?.message || result?.error || 'Erro ao deletar briefing');
+    }
+
+    alert('Briefing deletado com sucesso.');
+    loadAdminBriefings();
+  } catch (error) {
+    alert('Não foi possível deletar o briefing. ' + error.message);
+  }
+}
+
+window.deleteBriefing = deleteBriefing;
+window.copyBriefingToClipboard = copyBriefingToClipboard;
 
 // ---------- VAGAS ADMIN ----------
 function renderAdminVagas() {
