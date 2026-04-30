@@ -34,7 +34,13 @@ async function uploadFile(file, folder) {
 
   const realFile = Array.isArray(file) ? file[0] : file;
   const fileBuffer = fs.readFileSync(realFile.filepath);
-  const fileName = `${folder}/${Date.now()}-${realFile.originalFilename}`;
+  const safeName = realFile.originalFilename
+  .normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .replace(/[^a-zA-Z0-9._-]/g, "-")
+  .replace(/-+/g, "-");
+
+const fileName = `${folder}/${Date.now()}-${safeName}`;
 
   const { error } = await supabase.storage
     .from("documentos")
