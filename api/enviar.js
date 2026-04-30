@@ -1,11 +1,10 @@
 import formidable from "formidable";
 import fs from "fs";
+import PDFDocument from "pdfkit";
 import { createClient } from "@supabase/supabase-js";
 
 export const config = {
-  api: {
-    bodyParser: false,
-  },
+  api: { bodyParser: false },
 };
 
 const supabase = createClient(
@@ -29,23 +28,74 @@ function getValue(fields, name) {
   return Array.isArray(value) ? value[0] : value || "";
 }
 
+function safeFileName(name) {
+  return name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9._-]/g, "-")
+    .replace(/-+/g, "-");
+}
+
 async function uploadFile(file, folder) {
-  if (!file) return "";
+  if (!file) return null;
 
   const realFile = Array.isArray(file) ? file[0] : file;
   const fileBuffer = fs.readFileSync(realFile.filepath);
-  const safeName = realFile.originalFilename
-  .normalize("NFD")
-  .replace(/[\u0300-\u036f]/g, "")
-  .replace(/[^a-zA-Z0-9._-]/g, "-")
-  .replace(/-+/g, "-");
-
-const fileName = `${folder}/${Date.now()}-${safeName}`;
+  const fileName = `${folder}/${Date.now()}-${safeFileName(realFile.originalFilename)}`;
 
   const { error } = await supabase.storage
     .from("documentos")
     .upload(fileName, fileBuffer, {
       contentType: realFile.mimetype,
+      upsert: false,
+    });
+
+  if (error) throw error;
+
+  return fileName;
+}
+
+function gerarPdfBuffer(dados) {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ margin: 50 });
+    const chunks = [];
+
+    doc.on("data", chunk => chunks.push(chunk));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+
+    doc.fontSize(20).text("Briefing de Atendimento", { align: "center" });
+    doc.moveDown();
+
+    doc.fontSize(12).text(`Nome: ${dados.nome}`);
+    doc.text(`E-mail: ${dados.email}`);
+    doc.text(`Telefone: ${dados.telefone}`);
+    doc.text(`LinkedIn: ${dados.linkedin}`);
+    doc.text(`Usuário LinkedIn: ${dados.linkedin_user}`);
+    doc.moveDown();
+
+    doc.fontSize(14).text("Objetivo profissional:");
+    doc.fontSize(12).text(dados.objetivo || "Não informado", {
+      align: "left"
+    });
+
+    doc.moveDown();
+    doc.fontSize(10).text(
+      `Gerado em: ${new Date().toLocaleString("pt-BR")}`,
+      { align: "right" }
+    );
+
+    doc.end();
+  });
+}
+
+async function uploadPdf(buffer, nome) {
+  const fileName = `pdfs/${Date.now()}-briefing-${safeFileName(nome || "cliente")}.pdf`;
+
+  const { error } = await supabase.storage
+    .from("documentos")
+    .upload(fileName, buffer, {
+      contentType: "application/pdf",
       upsert: false,
     });
 
@@ -62,28 +112,29 @@ export default async function handler(req, res) {
 
     const { fields, files } = await parseForm(req);
 
-    const nome = getValue(fields, "nome");
-    const email = getValue(fields, "email");
-    const telefone = getValue(fields, "telefone");
-    const linkedin = getValue(fields, "linkedin");
-    const linkedin_user = getValue(fields, "linkedinUser");
-    const objetivo = getValue(fields, "objetivo");
+    const dados = {
+      nome: getValue(fields, "nome"),
+      email: getValue(fields, "email"),
+      telefone: getValue(fields, "telefone"),
+      linkedin: getValue(fields, "linkedin"),
+      linkedin_user: getValue(fields, "linkedinUser"),
+      objetivo: getValue(fields, "objetivo"),
+    };
 
     const curriculo_path = await uploadFile(files.curriculo, "curriculos");
     const carta_path = await uploadFile(files.carta, "cartas");
+
+    const pdfBuffer = await gerarPdfBuffer(dados);
+    const pdf_path = await uploadPdf(pdfBuffer, dados.nome);
 
     const { data, error } = await supabase
       .from("briefings")
       .insert([
         {
-          nome,
-          email,
-          telefone,
-          linkedin,
-          linkedin_user,
-          objetivo,
+          ...dados,
           curriculo_path,
           carta_path,
+          pdf_path,
         },
       ])
       .select();
@@ -93,6 +144,7 @@ export default async function handler(req, res) {
     }
 
     return res.status(200).json({ ok: true, data });
+
   } catch (error) {
     return res.status(500).json({
       ok: false,
