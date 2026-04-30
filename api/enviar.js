@@ -36,6 +36,19 @@ function safeFileName(name) {
     .replace(/-+/g, "-");
 }
 
+// Validadores
+function validarEmail(email) {
+  const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return regex.test(email);
+}
+
+function validarTelefone(telefone) {
+  // Remove caracteres não numéricos
+  const apenasNumeros = telefone.replace(/\D/g, "");
+  // Aceita números de telefone com 10 a 15 dígitos
+  return apenasNumeros.length >= 10 && apenasNumeros.length <= 15;
+}
+
 async function uploadFile(file, folder) {
   if (!file) return null;
 
@@ -118,6 +131,28 @@ export default async function handler(req, res) {
       linkedin_user: getValue(fields, "linkedinUser"),
       objetivo: getValue(fields, "objetivo"),
     };
+
+    // Validações
+    if (!dados.nome || !dados.email || !dados.telefone || !dados.linkedin) {
+      return res.status(400).json({ 
+        ok: false, 
+        error: "Nome, email, telefone e LinkedIn são obrigatórios" 
+      });
+    }
+
+    if (!validarEmail(dados.email)) {
+      return res.status(400).json({ 
+        ok: false, 
+        error: "Email inválido. Por favor, verifique o formato." 
+      });
+    }
+
+    if (!validarTelefone(dados.telefone)) {
+      return res.status(400).json({ 
+        ok: false, 
+        error: "Telefone inválido. Use um formato válido (ex: 11 99999-9999)" 
+      });
+    }
 
     const curriculo_path = await uploadFile(files.curriculo, "curriculos");
     const carta_path = await uploadFile(files.carta, "cartas");
