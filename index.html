@@ -1358,7 +1358,7 @@ input[type="file"] {
       <div class="settings-card">
         <h3>Backup dos dados</h3>
         <p style="color: var(--c-muted); font-size: 0.9rem; margin-bottom: 16px;">
-          Os dados são armazenados localmente neste navegador. Faça backup periódico exportando para arquivo. Para sincronizar entre dispositivos, importe o arquivo no outro navegador.
+          As alterações do site são salvas no banco e aparecem em todos os dispositivos. O backup continua disponível como segurança.
         </p>
         <div class="export-actions">
           <button class="btn-add" id="exportBtn">Exportar dados (.json)</button>
@@ -1376,7 +1376,7 @@ input[type="file"] {
 <script>
 /* ============================================
    CAMINI CARREIRAS — Frontend + Admin
-   Persistência: localStorage (compatível com GitHub Pages)
+   Persistência: Supabase via API da Vercel + cache local de segurança
    ============================================ */
 
 const STORAGE_KEYS = {
@@ -1473,18 +1473,99 @@ function load(key, fallback) {
     return v ? JSON.parse(v) : fallback;
   } catch { return fallback; }
 }
-function save(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
+let allowRemoteSave = false;
+let remoteSaveTimer = null;
+
+function save(key, val) {
+  localStorage.setItem(key, JSON.stringify(val));
+
+  if (allowRemoteSave && [STORAGE_KEYS.VAGAS, STORAGE_KEYS.POSTS, STORAGE_KEYS.CONFIG].includes(key)) {
+    scheduleRemoteSave();
+  }
+}
 
 let vagas = load(STORAGE_KEYS.VAGAS, DEFAULT_VAGAS);
 let posts = load(STORAGE_KEYS.POSTS, DEFAULT_POSTS);
 let config = load(STORAGE_KEYS.CONFIG, DEFAULT_CONFIG);
 let adminPass = load(STORAGE_KEYS.PASS, DEFAULT_PASS);
 
-// initialize on first run
-if (!localStorage.getItem(STORAGE_KEYS.VAGAS)) save(STORAGE_KEYS.VAGAS, DEFAULT_VAGAS);
-if (!localStorage.getItem(STORAGE_KEYS.POSTS)) save(STORAGE_KEYS.POSTS, DEFAULT_POSTS);
-if (!localStorage.getItem(STORAGE_KEYS.CONFIG)) save(STORAGE_KEYS.CONFIG, DEFAULT_CONFIG);
-if (!localStorage.getItem(STORAGE_KEYS.PASS)) save(STORAGE_KEYS.PASS, DEFAULT_PASS);
+// initialize local cache on first run
+if (!localStorage.getItem(STORAGE_KEYS.VAGAS)) localStorage.setItem(STORAGE_KEYS.VAGAS, JSON.stringify(DEFAULT_VAGAS));
+if (!localStorage.getItem(STORAGE_KEYS.POSTS)) localStorage.setItem(STORAGE_KEYS.POSTS, JSON.stringify(DEFAULT_POSTS));
+if (!localStorage.getItem(STORAGE_KEYS.CONFIG)) localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(DEFAULT_CONFIG));
+if (!localStorage.getItem(STORAGE_KEYS.PASS)) localStorage.setItem(STORAGE_KEYS.PASS, JSON.stringify(DEFAULT_PASS));
+
+function getSiteAdminHeaders() {
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${adminPass || ''}`
+  };
+}
+
+function getCurrentPhotoData() {
+  return localStorage.getItem(STORAGE_PHOTO) || null;
+}
+
+async function loadSiteDataFromBackend() {
+  try {
+    const response = await fetch('/api/site-data?ts=' + Date.now(), { cache: 'no-store' });
+    const result = await response.json();
+
+    if (!response.ok || !result.ok) return;
+
+    const data = result.data || {};
+    vagas = Array.isArray(data.vagas) ? data.vagas : DEFAULT_VAGAS;
+    posts = Array.isArray(data.posts) ? data.posts : DEFAULT_POSTS;
+    config = data.config && typeof data.config === 'object' ? { ...DEFAULT_CONFIG, ...data.config } : DEFAULT_CONFIG;
+
+    localStorage.setItem(STORAGE_KEYS.VAGAS, JSON.stringify(vagas));
+    localStorage.setItem(STORAGE_KEYS.POSTS, JSON.stringify(posts));
+    localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(config));
+
+    if (data.photo) {
+      localStorage.setItem(STORAGE_PHOTO, data.photo);
+      const img = document.getElementById('sobrePhotoImg');
+      if (img) img.src = data.photo;
+    }
+
+    renderVagas();
+    renderPosts();
+    renderConfig();
+    refreshPhotoPreview();
+  } catch (error) {
+    console.warn('Não foi possível carregar dados sincronizados:', error);
+  }
+}
+
+function scheduleRemoteSave() {
+  clearTimeout(remoteSaveTimer);
+  remoteSaveTimer = setTimeout(() => {
+    persistSiteData().catch(error => {
+      console.error(error);
+      alert('Não foi possível salvar no banco. Verifique o ADMIN_TOKEN na Vercel.');
+    });
+  }, 500);
+}
+
+async function persistSiteData() {
+  const response = await fetch('/api/site-data', {
+    method: 'POST',
+    headers: getSiteAdminHeaders(),
+    body: JSON.stringify({
+      vagas,
+      posts,
+      config,
+      photo: getCurrentPhotoData()
+    })
+  });
+
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || !result.ok) {
+    throw new Error(result?.error || 'Erro ao salvar dados do site');
+  }
+
+  return result;
+}
 
 // ---------- NAV ----------
 const nav = document.getElementById('nav');
@@ -1641,6 +1722,7 @@ document.getElementById('logoutBtn').addEventListener('click', () => {
 });
 
 function showAdmin() {
+  allowRemoteSave = true;
   adminPanel.classList.add('active');
   document.documentElement.classList.add('admin-open');
   document.body.classList.add('admin-open');
@@ -2019,7 +2101,7 @@ function loadSiteConfigForm() {
   document.getElementById('cfg-instagram').value = config.instagram || '';
 }
 
-document.getElementById('saveSiteCfg').addEventListener('click', () => {
+document.getElementById('saveSiteCfg').addEventListener('click', async () => {
   config = {
     statClients: document.getElementById('cfg-stat-clients').value.trim(),
     statYears: document.getElementById('cfg-stat-years').value.trim(),
@@ -2028,6 +2110,7 @@ document.getElementById('saveSiteCfg').addEventListener('click', () => {
   };
   save(STORAGE_KEYS.CONFIG, config);
   renderConfig();
+  try { await persistSiteData(); } catch (error) { alert('Não foi possível salvar no banco. ' + error.message); return; }
   const a = document.getElementById('siteSaved');
   a.classList.add('show');
   setTimeout(() => a.classList.remove('show'), 3000);
@@ -2211,7 +2294,7 @@ document.getElementById('photoInput').addEventListener('change', (e) => {
   status.classList.add('show');
 
   const reader = new FileReader();
-  reader.onload = (ev) => {
+  reader.onload = async (ev) => {
     const img = new Image();
     img.onload = () => {
       const removeBg = document.getElementById('photoRemoveBg').checked;
@@ -2231,11 +2314,12 @@ document.getElementById('photoInput').addEventListener('change', (e) => {
   reader.readAsDataURL(file);
 });
 
-document.getElementById('savePhoto').addEventListener('click', () => {
+document.getElementById('savePhoto').addEventListener('click', async () => {
   if (!pendingPhotoDataUrl) return;
   try {
     localStorage.setItem(STORAGE_PHOTO, pendingPhotoDataUrl);
     document.getElementById('sobrePhotoImg').src = pendingPhotoDataUrl;
+    await persistSiteData();
     pendingPhotoDataUrl = null;
     document.getElementById('savePhoto').disabled = true;
     document.getElementById('photoStatus').classList.remove('show');
@@ -2248,10 +2332,11 @@ document.getElementById('savePhoto').addEventListener('click', () => {
   }
 });
 
-document.getElementById('resetPhoto').addEventListener('click', () => {
+document.getElementById('resetPhoto').addEventListener('click', async () => {
   if (!confirm('Restaurar a foto original? A foto enviada será removida.')) return;
   localStorage.removeItem(STORAGE_PHOTO);
   document.getElementById('sobrePhotoImg').src = originalPhotoSrc;
+  try { await persistSiteData(); } catch (error) { alert('Não foi possível salvar a remoção no banco. ' + error.message); }
   refreshPhotoPreview();
   document.getElementById('photoInput').value = '';
   pendingPhotoDataUrl = null;
@@ -2260,6 +2345,7 @@ document.getElementById('resetPhoto').addEventListener('click', () => {
 });
 
 loadStoredPhoto();
+loadSiteDataFromBackend();
 
 // ============================================
 // IMPORT BACKUP
@@ -2272,7 +2358,7 @@ document.getElementById('importInput').addEventListener('change', (e) => {
     return;
   }
   const reader = new FileReader();
-  reader.onload = (ev) => {
+  reader.onload = async (ev) => {
     try {
       const data = JSON.parse(ev.target.result);
       if (data.vagas) vagas = data.vagas;
@@ -2291,6 +2377,7 @@ document.getElementById('importInput').addEventListener('change', (e) => {
       refreshPhotoPreview();
       renderVagas(); renderPosts(); renderConfig();
       renderAdminVagas(); renderAdminPosts(); loadSiteConfigForm();
+      try { await persistSiteData(); } catch (error) { alert('Importado localmente, mas não salvou no banco. ' + error.message); return; }
       alert('Dados importados com sucesso.');
     } catch (err) {
       alert('Arquivo inválido. ' + err.message);
