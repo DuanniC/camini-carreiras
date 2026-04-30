@@ -736,12 +736,27 @@ document.getElementById('submitBtn').addEventListener('click', async () => {
   const email = document.getElementById('email').value.trim();
   const telefone = document.getElementById('telefone')?.value.trim() || '';
   const linkedin = document.getElementById('linkedin').value.trim();
-  const linkedinUser = document.getElementById('linkedin-user').value.trim();
+  const linkedinUser = document.getElementById('linkedin-user')?.value.trim() || '';
   const objetivo = document.getElementById('objetivo')?.value.trim() || '';
+  const curriculo = document.getElementById('curriculo')?.files[0];
+  const carta = document.getElementById('carta')?.files[0];
 
-  if (!nome || !email || !linkedin || !linkedinUser) {
+  if (!nome || !email || !linkedin || !curriculo) {
     alert('Por favor, preencha todos os campos obrigatórios antes de enviar.');
     return;
+  }
+
+  const formData = new FormData();
+  formData.append('nome', nome);
+  formData.append('email', email);
+  formData.append('telefone', telefone);
+  formData.append('linkedin', linkedin);
+  formData.append('linkedinUser', linkedinUser);
+  formData.append('objetivo', objetivo);
+  formData.append('curriculo', curriculo);
+
+  if (carta) {
+    formData.append('carta', carta);
   }
 
   try {
@@ -750,14 +765,14 @@ document.getElementById('submitBtn').addEventListener('click', async () => {
 
     const response = await fetch('/api/enviar', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nome, email, telefone, linkedin, linkedinUser, objetivo })
+      body: formData
     });
 
     const result = await response.json();
 
     if (!response.ok || !result.ok) {
-      alert('Erro ao enviar briefing');
+      console.log(result);
+      alert('Erro ao enviar briefing.');
       btn.disabled = false;
       btn.textContent = 'Enviar briefing';
       return;
@@ -768,7 +783,8 @@ document.getElementById('submitBtn').addEventListener('click', async () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
   } catch (error) {
-    alert('Erro ao enviar briefing');
+    console.log(error);
+    alert('Erro ao enviar briefing.');
     btn.disabled = false;
     btn.textContent = 'Enviar briefing';
   }
