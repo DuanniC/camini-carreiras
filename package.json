@@ -1,0 +1,17 @@
+{
+  "name": "camini-briefing-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "latest",
+    "formidable": "latest",
+    "pdfkit": "latest",
+    "resend": "latest"
+  },
+  "devDependencies": {
+    "vercel": "latest"
+  }
+}
