@@ -75,9 +75,7 @@ function gerarPdfBuffer(dados) {
     doc.moveDown();
 
     doc.fontSize(14).text("Objetivo profissional:");
-    doc.fontSize(12).text(dados.objetivo || "Não informado", {
-      align: "left"
-    });
+    doc.fontSize(12).text(dados.objetivo || "Não informado");
 
     doc.moveDown();
     doc.fontSize(10).text(
@@ -142,6 +140,45 @@ export default async function handler(req, res) {
     if (error) {
       return res.status(400).json({ ok: false, error });
     }
+
+    // ENVIO DE EMAIL
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: process.env.EMAIL_FROM,
+        to: process.env.EMAIL_TO,
+        subject: "Novo briefing recebido",
+        html: `
+          <h2>Novo briefing recebido</h2>
+
+          <p><strong>Nome:</strong> ${dados.nome}</p>
+          <p><strong>Email:</strong> ${dados.email}</p>
+          <p><strong>Telefone:</strong> ${dados.telefone}</p>
+          <p><strong>LinkedIn:</strong> ${dados.linkedin}</p>
+
+          <p><strong>Objetivo:</strong><br>${dados.objetivo}</p>
+
+          ${curriculo_path ? `
+          <p><strong>Currículo:</strong><br>
+          <a href="${process.env.ALLOWED_ORIGIN}/api/arquivo?path=${encodeURIComponent(curriculo_path)}">Abrir</a></p>
+          ` : ""}
+
+          ${carta_path ? `
+          <p><strong>Carta:</strong><br>
+          <a href="${process.env.ALLOWED_ORIGIN}/api/arquivo?path=${encodeURIComponent(carta_path)}">Abrir</a></p>
+          ` : ""}
+
+          ${pdf_path ? `
+          <p><strong>PDF do briefing:</strong><br>
+          <a href="${process.env.ALLOWED_ORIGIN}/api/arquivo?path=${encodeURIComponent(pdf_path)}">Abrir</a></p>
+          ` : ""}
+        `,
+      }),
+    });
 
     return res.status(200).json({ ok: true, data });
 
