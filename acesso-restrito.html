@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Acesso restrito — Camini Carreiras</title>
+<style>
+:root{--c-wine:#4F0F1A;--c-bg:#F5F2EC;--c-ink:#2A1418;--c-muted:#6B5A5E;--c-line:rgba(79,15,26,.15)}
+*{box-sizing:border-box} body{margin:0;font-family:Montserrat,Arial,sans-serif;background:var(--c-bg);color:var(--c-ink);padding:32px;line-height:1.5}.wrap{max-width:980px;margin:0 auto}h1{font-family:Georgia,serif;color:var(--c-wine);font-weight:500}.card{background:#fff;border:1px solid var(--c-line);border-radius:10px;padding:20px;margin:16px 0;box-shadow:0 10px 30px rgba(42,20,24,.06)}input,button{width:100%;padding:14px;border-radius:6px;border:1px solid var(--c-line);font-size:15px}button{background:var(--c-wine);color:white;font-weight:600;cursor:pointer;margin-top:10px}.muted{color:var(--c-muted);font-size:14px}.briefing{display:grid;gap:8px}.briefing strong{color:var(--c-wine)}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}.actions a{background:var(--c-bg);border:1px solid var(--c-line);padding:10px 12px;border-radius:999px;color:var(--c-wine);text-decoration:none;font-size:14px}@media(max-width:640px){body{padding:18px}.actions{display:grid}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Acesso restrito</h1>
+  <p class="muted">Digite o token do painel para visualizar os briefings recebidos.</p>
+
+  <div class="card">
+    <input type="password" id="token" placeholder="Token de acesso" />
+    <button onclick="carregarBriefings()">Entrar</button>
+  </div>
+
+  <div id="lista"></div>
+</div>
+<script>
+const API_BASE_URL = "COLE_AQUI_A_URL_DA_VERCEL";
+
+async function carregarBriefings(){
+  const token = document.getElementById('token').value.trim();
+  const lista = document.getElementById('lista');
+
+  if(!token){ alert('Informe o token de acesso.'); return; }
+  if(API_BASE_URL.includes('COLE_AQUI')){ alert('Configure a URL da Vercel no arquivo acesso-restrito.html.'); return; }
+
+  lista.innerHTML = '<p class="muted">Carregando...</p>';
+
+  try{
+    const response = await fetch(`${API_BASE_URL}/api/briefings`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const data = await response.json();
+    if(!response.ok) throw new Error(data.error || 'Erro ao carregar briefings.');
+
+    if(!data.briefings.length){
+      lista.innerHTML = '<p class="muted">Nenhum briefing encontrado.</p>';
+      return;
+    }
+
+    lista.innerHTML = data.briefings.map(item => `
+      <div class="card briefing">
+        <strong>${escapeHtml(item.nome || 'Sem nome')}</strong>
+        <span>${escapeHtml(item.email || '')}</span>
+        <span>${escapeHtml(item.telefone || '')}</span>
+        <span>LinkedIn: ${escapeHtml(item.linkedin || '')}</span>
+        <span class="muted">Recebido em: ${new Date(item.created_at).toLocaleString('pt-BR')}</span>
+        ${item.objetivo ? `<p>${escapeHtml(item.objetivo)}</p>` : ''}
+        <div class="actions">
+          ${item.curriculo_url ? `<a target="_blank" href="${item.curriculo_url}">Baixar currículo</a>` : ''}
+          ${item.carta_url ? `<a target="_blank" href="${item.carta_url}">Baixar carta</a>` : ''}
+          ${item.pdf_url ? `<a target="_blank" href="${item.pdf_url}">Baixar PDF</a>` : ''}
+        </div>
+      </div>
+    `).join('');
+  }catch(error){
+    lista.innerHTML = `<p class="muted">${escapeHtml(error.message)}</p>`;
+  }
+}
+
+function escapeHtml(text){
+  return String(text).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#039;','"':'&quot;'}[c]));
+}
+</script>
+</body>
+</html>
